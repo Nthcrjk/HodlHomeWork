@@ -14,7 +14,7 @@ class HomeInteractor(
     
     suspend fun send(addressToSend: String, amountToSend: Long): CoinTransaction {
         var result = bitcoinjRepository.sendCoins(addressToSend, amountToSend)
-        return bitcoinjRepository.getTxInfo("result")
+        return bitcoinjRepository.getTxInfo(result)
     }
 
     suspend fun getBalance(address: String): Long {

@@ -121,7 +121,7 @@ class BitcoinjRepository(private val restApi: ApiService): BaseInteractor() {
         Log.e("gaf",tx.inputs.toString())
         Log.e("gaf",tx.outputs.toString())
 
-        utxoList.first().let { it ->
+        utxoList.last().let { it ->
             val txid = Sha256Hash.wrap(it.txid)
             val vout = it.vout
 
