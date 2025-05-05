@@ -2,6 +2,7 @@ package ru.flx.hodlhomework.repositories.bitcoinj
 
 import android.util.Log
 import okhttp3.RequestBody
+import org.bitcoinj.base.Address
 import org.bitcoinj.base.AddressParser
 import org.bitcoinj.base.Coin
 import org.bitcoinj.base.ScriptType
@@ -30,18 +31,14 @@ class BitcoinjRepository(private val restApi: ApiService): BaseInteractor() {
     }
 
     suspend fun getTransactionsList(pKey: String): MutableList<CoinTransaction> {
-        val params = SigNetParams.get()
-        var key = DumpedPrivateKey.fromBase58(params.network(), pKey).key
-        var address = key.toAddress(ScriptType.P2WPKH, params.network()).toString()
+        val address = getAddressFromKey(pKey)
 
         val result = obtainResponse{ restApi.jsonApi.getStarterTransactionList(address) }
         return result.map { CoinTransaction.fromTransactionResponse(it, address) }.toMutableList()
     }
 
     suspend fun getTransactionByLastTxId(pKey: String, lastTxId: String): MutableList<CoinTransaction> {
-        val params = SigNetParams.get()
-        var key = DumpedPrivateKey.fromBase58(params.network(), pKey).key
-        var address = key.toAddress(ScriptType.P2WPKH, params.network()).toString()
+        val address = getAddressFromKey(pKey)
         var result = obtainResponse{ restApi.jsonApi.getTransactionsFromTxId(address, lastTxId) }
         return result.map { CoinTransaction.fromTransactionResponse(it, address) }.toMutableList()
     }
@@ -49,9 +46,7 @@ class BitcoinjRepository(private val restApi: ApiService): BaseInteractor() {
 
 
     suspend fun getTxInfo(txId: String): CoinTransaction {
-        val params = SigNetParams.get()
-        var key = DumpedPrivateKey.fromBase58(params.network(), BuildConfig.KEY).key
-        var address = key.toAddress(ScriptType.P2WPKH, params.network()).toString()
+        val address = getAddressFromKey(BuildConfig.KEY)
 
         var result = CoinTransaction.fromTransactionResponse(
             obtainResponse { restApi.jsonApi.getTxInfo(txId) },
@@ -61,61 +56,25 @@ class BitcoinjRepository(private val restApi: ApiService): BaseInteractor() {
     }
 
     suspend fun getBalanceByKey(pKey: String): MutableList<UtxoResponse> {
-        val params = SigNetParams.get()
-        var key = DumpedPrivateKey.fromBase58(params.network(), pKey).key
-        var address = key.toAddress(ScriptType.P2WPKH, params.network())
-        return getUtxoList(address.toString())
+        val address = getAddressFromKey(pKey)
+        return getUtxoList(address)
     }
 
     @OptIn(ExperimentalStdlibApi::class)
     suspend fun sendCoins(addressToSend: String, amountToSend: Long): String {
-
         val params = SigNetParams.get()
-
-        var key = DumpedPrivateKey.fromBase58(params.network(), "cNW98n9gD35fDn99SNYzMx6WWAAxmx9a9ntx5wFQyCjCjsJV7oUq").key
+        var key = DumpedPrivateKey.fromBase58(params.network(), BuildConfig.KEY).key
         var address = key.toAddress(ScriptType.P2WPKH, params.network())
 
-
         var outAddress = AddressParser.getDefault(params.network()).parseAddress(addressToSend)
-
         val tx = Transaction()
-
         val utxoList = getUtxoList(address.toString())
 
         val balance = utxoList.sumOf { it.value }
-        val fee = 500L
-        if (amountToSend + fee > balance) {
-            throw IllegalArgumentException("Недостаточно баланса")
-        }
-
-        /*
-                utxoList.forEachIndexed { index, it ->
-                    val txid = Sha256Hash.wrap(it.txid)
-                    val tOutPoint = TransactionOutPoint(it.vout, txid)
-                    //val input = TransactionInput(tx, byteArrayOf(), tOutPoint, Coin.valueOf(it.value))
-
-                    val scriptCode = ScriptBuilder.createP2PKHOutputScript(privateKey.pubKeyHash)
-
-                    tx.addSignedInput(
-                        tOutPoint,
-                        scriptCode,
-                        Coin.valueOf(it.value),
-                        privateKey
-                    )
-
-        /*
-                    val signature = tx.calculateWitnessSignature(
-                        index,
-                        privateKey,
-                        scriptCode,
-                        Coin.valueOf(it.value),
-                        Transaction.SigHash.ALL,
-                        false
-                    )
-                    tx.getInput(index.toLong()).withWitness(TransactionWitness.of(listOf(signature.encodeToBitcoin(), privateKey.pubKey)))
-        */
-                }
-        */
+        val feeRate = 2
+        var fee =  20
+        val inputPrice = 73
+        val outputPrice = 33
 
         utxoList.sortBy { it.value }
         utxoList.reverse()
@@ -125,30 +84,29 @@ class BitcoinjRepository(private val restApi: ApiService): BaseInteractor() {
 
         for (utho in utxoList) {
             selectedUtxo.add(utho)
+            fee = fee + (inputPrice * feeRate)
             total = total + utho.value
             if (total >= amountToSend + fee) break
         }
 
-
-
-
-        val change = total.minus(amountToSend).minus(fee)
-
+        fee = fee + (outputPrice * feeRate)
         tx.addOutput(Coin.valueOf(amountToSend), outAddress)
-        tx.addOutput(Coin.valueOf(change), address)
+
+        if ((total - amountToSend - fee) != 0L) {
+            fee = fee + (outputPrice * feeRate)
+            val change = total.minus(amountToSend).minus(fee)
+            tx.addOutput(Coin.valueOf(change), address)
+        }
+
 
         val script = ScriptBuilder.createP2PKHOutputScript(key.pubKeyHash)
 
         selectedUtxo.forEachIndexed{index, it ->
             val txid = Sha256Hash.wrap(it.txid)
             val vout = it.vout
-
             val tOutPoint = TransactionOutPoint(vout, txid)
-
             val input = TransactionInput(tx, byteArrayOf(), tOutPoint, Coin.valueOf(it.value))
-
             tx.addInput(input)
-
         }
 
         for (i in 0 until tx.inputs.size) {
@@ -164,40 +122,11 @@ class BitcoinjRepository(private val restApi: ApiService): BaseInteractor() {
             txIn.witness = TransactionWitness.of(listOf(signature.encodeToBitcoin(), key.pubKey))
         }
 
-
         val hex = tx.serialize().toHexString()
-        Log.e("gaf",tx.inputs.toString())
-        Log.e("gaf",tx.outputs.toString())
-        val type = okhttp3.MediaType.parse("text/plain")
-        val requestBody = RequestBody.create(type, hex)
-        restApi.textApi.sendTransaction(requestBody)
 
-
-        // var outAdress = Address.fromString(SigNetParams.get(), "cNW98n9gD35fDn99SNYzMx6WWAAxmx9a9ntx5wFQyCjCjsJV7oUq")
-        //val tOutput = tx.addOutput(Coin.valueOf(1000), outAdress)
-        /*
-                val tx = Transaction()
-
-                val tInput = tx.addSignedInput(
-                    tOutPoint,
-                    script,
-                    Coin.valueOf(1000),
-                    privateKey
-                )
-
-                */
-
-
-        /*
-        val tx = Transaction()
-        val outPoint = Sha256Hash.wrap(utxo.txid)
-        val script = ScriptBuilder.createOutputScript(address)
-        */
-        Log.e("gaf", hex)
-        Log.e("gaf", key.toString())
-        Log.e("gaf", key.privKey.toString())
-        Log.e("gaf", address.toString())
-
+        if (amountToSend + fee > balance) {
+            throw IllegalArgumentException("Not enough balance")
+        }
 
         return sendToMempool(hex)
     }
@@ -207,5 +136,11 @@ class BitcoinjRepository(private val restApi: ApiService): BaseInteractor() {
         val requestBody = RequestBody.create(type, hex)
         val result = obtainResponse{ restApi.textApi.sendTransaction(requestBody) }
         return result
+    }
+
+    private fun getAddressFromKey(key: String): String {
+        val params = SigNetParams.get()
+        var key = DumpedPrivateKey.fromBase58(params.network(), key).key
+        return key.toAddress(ScriptType.P2WPKH, params.network()).toString()
     }
 }

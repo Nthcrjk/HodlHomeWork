@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.ResponseBody
+import org.bitcoinj.base.exceptions.AddressFormatException
 import ru.flx.hodlhomework.common.exceptions.MempoolException
 import ru.flx.hodlhomework.repositories.notification.NotificationEvent
 import ru.flx.hodlhomework.repositories.notification.NotificationManager
@@ -24,6 +25,9 @@ abstract class BaseViewModel<S>(
         when (e) {
             is MempoolException -> {
                 notificationSystem.notify(NotificationEvent.ShowToast(e.message))
+            }
+            is AddressFormatException -> {
+                notificationSystem.notify(NotificationEvent.ShowToast("Invalid address"))
             }
             is IllegalArgumentException -> {
                 val msg = e.message ?: "Unknown error"

@@ -24,7 +24,11 @@ fun HomeRoute() {
         state.value.showDialog,
         state.value.transactionsList,
         onChangeAmountToSend = {
-            viewModel.updateState(amountToSend = it)
+            if (it == null) {
+                viewModel.clearAmountToSend()
+            } else {
+                viewModel.updateState(amountToSend = it)
+            }
         },
         onChangeAddressToSend = {
             viewModel.updateState(addressToSend = it)
@@ -36,10 +40,7 @@ fun HomeRoute() {
             viewModel.sendBtnClick()
         },
         onDismissDialog =  {
-
+            viewModel.dismissDialog()
         },
-        onTxIdClick = {
-
-        }
     )
 }

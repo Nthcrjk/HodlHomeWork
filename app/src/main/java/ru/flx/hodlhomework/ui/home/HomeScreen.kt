@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -39,9 +40,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.text.isDigitsOnly
 import com.example.compose.HodlHomeWorkTheme
 import ru.flx.hodlhomework.ui.data.CoinTransaction
 import java.text.SimpleDateFormat
@@ -51,24 +54,20 @@ import java.util.Locale
 @Composable
 fun HomeScreen(
     balanceAmount: Long?,
-    amountToSend: Double?,
+    amountToSend: Long?,
     addressToSend: String?,
     dialogState: DialogUiState,
     listState: MutableList<CoinTransaction> = mutableListOf<CoinTransaction>(),
     onLoadMoreTransactions: () -> Unit,
-    onChangeAmountToSend: (Double) -> Unit,
+    onChangeAmountToSend: (Long?) -> Unit,
     onChangeAddressToSend: (String) -> Unit,
     onSend: () -> Unit,
-    onTxIdClick: () -> Unit,
     onDismissDialog: () -> Unit,
 ) {
     if (dialogState.isShowDialog) {
         dialogState.txId?.let {
             HomeDialog(
                 it,
-                {
-                    onTxIdClick()
-                },
                 {
                     onDismissDialog()
                 }
@@ -110,7 +109,7 @@ fun HomeScreen(
                             CircularProgressIndicator()
                         } else {
                             Text(
-                                text = "$balanceAmount BTC",
+                                text = "${"%.5f".format(balanceAmount.toDouble()/100_000)} tBTC",
                                 style = MaterialTheme.typography.displayMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -133,14 +132,19 @@ fun HomeScreen(
                         OutlinedTextField(
                             value = amountToSend?.toString() ?: "",
                             onValueChange = {
-                                onChangeAmountToSend(it.toDouble())
+                                if (it.isDigitsOnly()) {
+                                    onChangeAmountToSend(it.toLongOrNull())
+                                }
                             },
                             label = { Text("Сумма", color = Color.Gray) },
                             singleLine = true,
+                            keyboardOptions = KeyboardOptions.Default.copy(
+                                keyboardType = KeyboardType.Number
+                            ),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
+                                .padding(horizontal = 16.dp),
                         )
                         Spacer(Modifier.height(16.dp))
                         OutlinedButton (
@@ -264,14 +268,14 @@ fun TransactionItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = if (isReceived) "Получено" else "Отправлено",
-                    fontSize = 16.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.Black
                 )
                 Text(
                     text = "TX: ${txId.take(6)}...${txId.takeLast(6)}",
-                    fontSize = 14.sp,
-                    color = Color.Gray,
+                    fontSize = 16.sp,
+                    color = Color.Black,
                     modifier = Modifier.padding(top = 4.dp)
                 )
                 Text(
@@ -283,7 +287,7 @@ fun TransactionItem(
             }
 
             Text(
-                text = amount.toString(),//"${"%.8f".format(amount)} tBTC",
+                text = "${amount} sats",
                 fontWeight = FontWeight.Bold,
                 color = amountColor,
                 fontSize = 14.sp
@@ -307,7 +311,6 @@ fun HomeScreenPreview() {
             {},
             {},
             {},
-            {}
         )
     }
 }

@@ -1,9 +1,11 @@
 package ru.flx.hodlhomework.ui.home
 
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -17,8 +19,8 @@ import javax.inject.Inject
 
 data class HomeUiState(
     val balanceAmount: Long? = null,
-    val amountToSend: Double? = null,
-    val addressToSend: String? = null,
+    val amountToSend: Long? = null,
+    val addressToSend: String = "",
     val transactionsList: MutableList<CoinTransaction> = mutableListOf<CoinTransaction>(),
     val showDialog: DialogUiState = DialogUiState(),
 )
@@ -36,7 +38,7 @@ class HomeViewModel @Inject constructor(
 
     fun updateState(
         balanceAmount: Long? = null,
-        amountToSend: Double? = null,
+        amountToSend: Long? = null,
         addressToSend: String? = null,
     ) {
         _state.update {
@@ -44,6 +46,14 @@ class HomeViewModel @Inject constructor(
                 balanceAmount = balanceAmount ?: it.balanceAmount,
                 amountToSend = amountToSend ?: it.amountToSend,
                 addressToSend = addressToSend ?: it.addressToSend
+            )
+        }
+    }
+
+    fun clearAmountToSend() {
+        _state.update {
+            it.copy(
+                amountToSend = null,
             )
         }
     }
@@ -68,15 +78,22 @@ class HomeViewModel @Inject constructor(
     }
 
     fun sendBtnClick() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 var reuslt = homeInteractor.send(
-                    addressToSend = "tb1qlf6kk7qyth239jp5ulzjannpvyrzrpz6p2cfex",
-                    amountToSend = 6000
+                    addressToSend = state.value.addressToSend.toString(),
+                    amountToSend = state.value.amountToSend ?: 0,
                 )
                 var newBalance = state.value.balanceAmount?.plus(reuslt.amount)
                 updateState(balanceAmount = newBalance)
-                state.value.transactionsList.add(0, reuslt)
+
+                var newList = mutableListOf(reuslt)
+                newList.addAll(state.value.transactionsList)
+                _state.update {
+                    it.copy(
+                        transactionsList = newList
+                    )
+                }
                 showDialog(reuslt.txId)
             } catch (e: Exception) {
                 exceptionCatcher(e)
@@ -85,7 +102,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun balance() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 val result = homeInteractor.getBalance(BuildConfig.KEY)
                 updateState(balanceAmount = result)
@@ -96,7 +113,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun getTransactions() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 if (state.value.transactionsList.isEmpty()) {
                     val result = homeInteractor.getTransactions(address = BuildConfig.KEY)
@@ -105,7 +122,12 @@ class HomeViewModel @Inject constructor(
                     }
                 } else {
                     val result = homeInteractor.getTransactionsByLastTxId(address = BuildConfig.KEY, state.value.transactionsList.last().lastId)
-                    state.value.transactionsList.addAll(result)
+                    val newList = mutableListOf<CoinTransaction>()
+                    newList.addAll(state.value.transactionsList)
+                    newList.addAll(result)
+                    _state.update {
+                        it.copy(transactionsList = newList)
+                    }
                 }
             } catch (e: Exception) {
                 exceptionCatcher(e)
