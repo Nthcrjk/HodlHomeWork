@@ -18,6 +18,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "API_URL",  "\"https://mempool.space/signet/api/\"")
+        buildConfigField("String", "KEY",  "\"cNW98n9gD35fDn99SNYzMx6WWAAxmx9a9ntx5wFQyCjCjsJV7oUq\"")
     }
 
     buildTypes {
@@ -38,6 +41,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -73,5 +77,8 @@ dependencies {
 
     implementation(libs.retrofit)
     implementation(libs.converter.gson)
+    implementation(libs.logging.interceptor)
     implementation(libs.retrofit2.kotlin.coroutines.adapter)
+
+    implementation(libs.bitcoinj.core)
 }

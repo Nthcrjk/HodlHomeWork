@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.compose.HodlHomeWorkTheme
 import dagger.hilt.android.AndroidEntryPoint
+import ru.flx.hodlhomework.ui.HodHomeWorkApp
 import ru.flx.hodlhomework.ui.home.HomeRoute
 
 @AndroidEntryPoint
@@ -21,9 +22,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            HodlHomeWorkTheme {
-                HomeRoute()
-            }
+            HodHomeWorkApp()
         }
     }
 }
