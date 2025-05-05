@@ -72,7 +72,7 @@ class HomeViewModel @Inject constructor(
             try {
                 var reuslt = homeInteractor.send(
                     addressToSend = "tb1qlf6kk7qyth239jp5ulzjannpvyrzrpz6p2cfex",
-                    amountToSend = 10000
+                    amountToSend = 6000
                 )
                 var newBalance = state.value.balanceAmount?.plus(reuslt.amount)
                 updateState(balanceAmount = newBalance)

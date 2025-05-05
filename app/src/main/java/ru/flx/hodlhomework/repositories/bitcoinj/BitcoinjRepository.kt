@@ -7,6 +7,7 @@ import org.bitcoinj.base.Coin
 import org.bitcoinj.base.ScriptType
 import org.bitcoinj.base.Sha256Hash
 import org.bitcoinj.core.Transaction
+import org.bitcoinj.core.TransactionInput
 import org.bitcoinj.core.TransactionOutPoint
 import org.bitcoinj.core.TransactionWitness
 import org.bitcoinj.crypto.DumpedPrivateKey
@@ -15,11 +16,8 @@ import org.bitcoinj.script.ScriptBuilder
 import ru.flx.hodlhomework.BuildConfig
 import ru.flx.hodlhomework.common.base.BaseInteractor
 import ru.flx.hodlhomework.repositories.rest_api.ApiService
-import ru.flx.hodlhomework.repositories.rest_api.TransactionResponse
 import ru.flx.hodlhomework.repositories.rest_api.UtxoResponse
 import ru.flx.hodlhomework.ui.data.CoinTransaction
-import kotlin.text.get
-import kotlin.toString
 
 class BitcoinjRepository(private val restApi: ApiService): BaseInteractor() {
 
@@ -74,8 +72,8 @@ class BitcoinjRepository(private val restApi: ApiService): BaseInteractor() {
 
         val params = SigNetParams.get()
 
-        var privateKey = DumpedPrivateKey.fromBase58(params.network(), "cNW98n9gD35fDn99SNYzMx6WWAAxmx9a9ntx5wFQyCjCjsJV7oUq").key
-        var address = privateKey.toAddress(ScriptType.P2WPKH, params.network())
+        var key = DumpedPrivateKey.fromBase58(params.network(), "cNW98n9gD35fDn99SNYzMx6WWAAxmx9a9ntx5wFQyCjCjsJV7oUq").key
+        var address = key.toAddress(ScriptType.P2WPKH, params.network())
 
 
         var outAddress = AddressParser.getDefault(params.network()).parseAddress(addressToSend)
@@ -118,38 +116,58 @@ class BitcoinjRepository(private val restApi: ApiService): BaseInteractor() {
         */
                 }
         */
-        Log.e("gaf",tx.inputs.toString())
-        Log.e("gaf",tx.outputs.toString())
 
-        utxoList.last().let { it ->
+        utxoList.sortBy { it.value }
+        utxoList.reverse()
+
+        val selectedUtxo = mutableListOf<UtxoResponse>()
+        var total = 0L
+
+        for (utho in utxoList) {
+            selectedUtxo.add(utho)
+            total = total + utho.value
+            if (total >= amountToSend + fee) break
+        }
+
+
+
+
+        val change = total.minus(amountToSend).minus(fee)
+
+        tx.addOutput(Coin.valueOf(amountToSend), outAddress)
+        tx.addOutput(Coin.valueOf(change), address)
+
+        val script = ScriptBuilder.createP2PKHOutputScript(key.pubKeyHash)
+
+        selectedUtxo.forEachIndexed{index, it ->
             val txid = Sha256Hash.wrap(it.txid)
             val vout = it.vout
 
             val tOutPoint = TransactionOutPoint(vout, txid)
-            val script = ScriptBuilder.createOutputScript(address)
 
-            val change = it.value.minus(amountToSend).minus(fee)
+            val input = TransactionInput(tx, byteArrayOf(), tOutPoint, Coin.valueOf(it.value))
 
-            tx.addOutput(Coin.valueOf(amountToSend), outAddress)
-            tx.addOutput(Coin.valueOf(change), address)
+            tx.addInput(input)
 
-            tx.addSignedInput(
-                tOutPoint,
+        }
+
+        for (i in 0 until tx.inputs.size) {
+            val txIn = tx.getInput(i.toLong())
+            val signature = tx.calculateWitnessSignature(
+                i,
+                key,
                 script,
-                Coin.valueOf(it.value),
-                privateKey
-            )
-            tx.hashForWitnessSignature(
-                0,
-                script,
-                Coin.valueOf(it.value),
+                tx.inputs[i].value,
                 Transaction.SigHash.ALL,
                 false
             )
+            txIn.witness = TransactionWitness.of(listOf(signature.encodeToBitcoin(), key.pubKey))
         }
 
-        val hex = tx.serialize().toHexString()
 
+        val hex = tx.serialize().toHexString()
+        Log.e("gaf",tx.inputs.toString())
+        Log.e("gaf",tx.outputs.toString())
         val type = okhttp3.MediaType.parse("text/plain")
         val requestBody = RequestBody.create(type, hex)
         restApi.textApi.sendTransaction(requestBody)
@@ -176,8 +194,8 @@ class BitcoinjRepository(private val restApi: ApiService): BaseInteractor() {
         val script = ScriptBuilder.createOutputScript(address)
         */
         Log.e("gaf", hex)
-        Log.e("gaf", privateKey.toString())
-        Log.e("gaf", privateKey.privKey.toString())
+        Log.e("gaf", key.toString())
+        Log.e("gaf", key.privKey.toString())
         Log.e("gaf", address.toString())
 
 
